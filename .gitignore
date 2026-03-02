@@ -1,0 +1,18 @@
+# Python .venv
+.venv/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Simulated AWS S3 Storage Tiers
+s3_inbox/
+s3_quarantine/
+s3_longterm/
+
+# IDE files
+.vscode/
+
+# Environment variables
+.env

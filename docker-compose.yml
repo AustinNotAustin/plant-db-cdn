@@ -1,0 +1,23 @@
+services:
+  mock-cdn:
+    build: .
+    container_name: plant-db-mock-cdn
+    ports:
+      - "${PORT}:${PORT}"
+    volumes:
+      - .:/app
+      - ./.env:/app/.env
+      - ./s3_inbox:/app/s3_inbox
+      - ./s3_quarantine:/app/s3_quarantine
+      - ./s3_longterm:/app/s3_longterm
+    environment:
+      - PORT=${PORT}
+      - CALLBACK_URL=${CALLBACK_URL}
+      - CALLBACK_SECRET=${CALLBACK_SECRET}
+    networks:
+      - plant-db-network
+
+networks:
+  plant-db-network:
+    name: plant-db_default
+    external: true
