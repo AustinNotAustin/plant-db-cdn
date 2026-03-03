@@ -2,7 +2,7 @@ import logging
 import sys
 import uvicorn
 
-from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, Response, Request, APIRouter
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, Response, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -15,7 +15,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from aws_services.config import PORT, S3_LONGTERM
-from aws_services.s3_service import mock_s3_presigned_post_handler
+from aws_services.s3_service import mock_s3_presigned_post_handler, S3AuthParams
 
 app = FastAPI(title="Mock AWS Service Architecture (Modular)")
 
@@ -41,20 +41,8 @@ async def cdn_health_check():
 async def s3_presigned_post(
     bucket_name: str,
     background_tasks: BackgroundTasks,
-    key: str = Form(...),
-    plant_id: str = Form(..., alias="x-amz-meta-plant-id"),
-    upload_id: str = Form(..., alias="x-amz-meta-upload-id"),
-    # AWS SigV4 / SigV2 specific fields from Boto3
-    policy: str = Form(None, alias="Policy"),
     file: UploadFile = File(...),
-    signature: str = Form(None, alias="X-Amz-Signature"),
-    credential: str = Form(None, alias="X-Amz-Credential"),
-    algorithm: str = Form(None, alias="X-Amz-Algorithm"),
-    date: str = Form(None, alias="X-Amz-Date"),
-    security_token: str = Form(None, alias="X-Amz-Security-Token"),
-    # Legacy fields
-    aws_access_key_id: str = Form(None, alias="AWSAccessKeyId"),
-    legacy_signature: str = Form(None, alias="signature")
+    s3_params: S3AuthParams = Depends()
 ):
     """
     Standard S3 Path-style Endpoint.
@@ -62,14 +50,9 @@ async def s3_presigned_post(
     """
     return await mock_s3_presigned_post_handler(
         background_tasks=background_tasks,
-        key=key,
-        plant_id=plant_id,
-        upload_id=upload_id,
         file=file,
         bucket_name=bucket_name,
-        policy=policy,
-        signature=signature,
-        legacy_signature=legacy_signature
+        s3_params=s3_params
     )
 
 if __name__ == "__main__":
