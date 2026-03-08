@@ -20,7 +20,14 @@ RUN pip install --no-cache-dir --require-hashes -r requirements.txt
 COPY . .
 
 # Create S3-tiered storage directories and set permissions
-RUN mkdir -p s3_inbox s3_quarantine s3_longterm && \
+RUN mkdir -p \
+    s3_inbox \
+    s3_quarantine \
+    s3_longterm/full-imgs \
+    s3_longterm/thumb-imgs \
+    s3_longterm/sales-imgs \
+    s3_longterm/profile-pics \
+    s3_longterm/company-logos && \
     chmod -R 777 s3_inbox s3_quarantine s3_longterm
 
 # Expose the default port
