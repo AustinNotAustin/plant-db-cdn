@@ -5,7 +5,18 @@ import os
 import shutil
 from PIL import Image
 
-from .config import S3_QUARANTINE, S3_LONGTERM, CALLBACK_URL, CALLBACK_SECRET
+from .config import (
+    S3_QUARANTINE, S3_LONGTERM,
+    CDN_FULL_IMGS, CDN_THUMB_IMGS, CDN_SALES_IMGS, CDN_PROFILE_PICS, CDN_COMPANY_LOGOS,
+    CALLBACK_URL, CALLBACK_SECRET,
+)
+
+# Maps image_category metadata values to their long-term storage directory
+CATEGORY_DIR_MAP = {
+    "sales":   CDN_SALES_IMGS,
+    "profile": CDN_PROFILE_PICS,
+    "logo":    CDN_COMPANY_LOGOS,
+}
 
 logger = logging.getLogger(__name__)
 
@@ -19,7 +30,7 @@ async def scan_content_policy(file_path: str) -> bool:
     await asyncio.sleep(0.1)
     return True
 
-async def s3_trigger_handler(inbox_path: str, upload_id: str, plant_id: str):
+async def s3_trigger_handler(inbox_path: str, upload_id: str, plant_id: str, image_category: str = "plant"):
     """
     Consumer function simulating an S3 Event -> SQS -> Lambda trigger.
     """
@@ -53,22 +64,37 @@ async def s3_trigger_handler(inbox_path: str, upload_id: str, plant_id: str):
             large.thumbnail((1200, 1200))
             large.save(os.path.join(S3_QUARANTINE, large_filename), "JPEG")
 
-        # 4. PROMOTION: Quarantine -> Long-Term
-        logger.info(f"[S3] Promoting variants to {S3_LONGTERM}")
-        shutil.move(os.path.join(S3_QUARANTINE, thumb_filename), os.path.join(S3_LONGTERM, thumb_filename))
-        shutil.move(os.path.join(S3_QUARANTINE, large_filename), os.path.join(S3_LONGTERM, large_filename))
+        # 4. PROMOTION: Quarantine -> Long-Term (category-specific subdirectory)
+        # Category-specific uploads (sales, profile, logo) use their own directory;
+        # default plant images are split into full-imgs and thumb-imgs.
+        if image_category in CATEGORY_DIR_MAP:
+            target_dir = CATEGORY_DIR_MAP[image_category]
+            full_dest = os.path.join(target_dir, large_filename)
+            thumb_dest = os.path.join(target_dir, thumb_filename)
+        else:
+            full_dest = os.path.join(CDN_FULL_IMGS, large_filename)
+            thumb_dest = os.path.join(CDN_THUMB_IMGS, thumb_filename)
+
+        logger.info(f"[S3] Promoting variants to {os.path.dirname(full_dest)}")
+        shutil.move(os.path.join(S3_QUARANTINE, large_filename), full_dest)
+        shutil.move(os.path.join(S3_QUARANTINE, thumb_filename), thumb_dest)
 
         # Cleanup original
         if os.path.exists(quarantine_path):
             os.remove(quarantine_path)
+
+        # Derive relative CDN paths (relative to S3_LONGTERM root served at /cdn)
+        # Use forward slashes to ensure URL compatibility across all platforms.
+        full_cdn_path = os.path.relpath(full_dest, S3_LONGTERM).replace(os.sep, "/")
+        thumb_cdn_path = os.path.relpath(thumb_dest, S3_LONGTERM).replace(os.sep, "/")
 
         # 5. ASYNC CALLBACK (Notify Backend)
         payload = {
             "upload_id": upload_id,
             "plant_id": plant_id,
             "status": "success",
-            "full_url": large_filename,
-            "thumbnail_url": thumb_filename
+            "full_url": full_cdn_path,
+            "thumbnail_url": thumb_cdn_path,
         }
         
         async with httpx.AsyncClient() as client:

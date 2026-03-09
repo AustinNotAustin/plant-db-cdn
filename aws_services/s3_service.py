@@ -18,6 +18,7 @@ class S3AuthParams:
         key: str = Form(...),
         plant_id: str = Form(..., alias="x-amz-meta-plant-id"),
         upload_id: str = Form(..., alias="x-amz-meta-upload-id"),
+        image_category: str = Form("plant", alias="x-amz-meta-image-category"),
         policy: str = Form(None, alias="Policy"),
         signature: str = Form(None, alias="X-Amz-Signature"),
         credential: str = Form(None, alias="X-Amz-Credential"),
@@ -30,6 +31,7 @@ class S3AuthParams:
         self.key = key
         self.plant_id = plant_id
         self.upload_id = upload_id
+        self.image_category = image_category
         self.policy = policy
         self.signature = signature
         self.credential = credential
@@ -82,7 +84,13 @@ async def mock_s3_presigned_post_handler(
     # 3. EVENT TRIGGER (Lambda Simulation)
     logger.info(f"[S3 Service] Object created: {s3_params.key}. Triggering lambda...")
     try:
-        background_tasks.add_task(s3_trigger_handler, inbox_path, s3_params.upload_id, s3_params.plant_id)
+        background_tasks.add_task(
+            s3_trigger_handler,
+            inbox_path,
+            s3_params.upload_id,
+            s3_params.plant_id,
+            s3_params.image_category,
+        )
     except Exception as e:
         logger.error(f"[S3 Service] Task handoff FAILED: {str(e)}")
         # Note: In real S3, the upload succeeds even if the trigger has issues (async)
