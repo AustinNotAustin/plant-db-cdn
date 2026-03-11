@@ -49,20 +49,26 @@ async def s3_trigger_handler(inbox_path: str, upload_id: str, plant_id: str, ima
         # 3. IMAGE PROCESSING
         logger.info(f"[Processor] Generating variants (Thumb + Large)...")
         with Image.open(quarantine_path) as img:
-            if img.mode in ("RGBA", "P"):
+            file_ext = img.format.lower() if img.format else "jpg"
+            if file_ext == "jpeg":
+                file_ext = "jpg"
+            
+            # If it's a PNG, keep RGBA but if it's targeted for JPEG, convert to RGB
+            if file_ext != "png" and img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
             
-            thumb_filename = f"thumb_{upload_id}.jpg"
-            large_filename = f"large_{upload_id}.jpg"
+            thumb_filename = f"thumb_{upload_id}.{file_ext}"
+            large_filename = f"large_{upload_id}.{file_ext}"
+            save_format = "PNG" if file_ext == "png" else "JPEG"
 
             # Generate variants
             thumb = img.copy()
             thumb.thumbnail((200, 200))
-            thumb.save(os.path.join(S3_QUARANTINE, thumb_filename), "JPEG")
+            thumb.save(os.path.join(S3_QUARANTINE, thumb_filename), save_format)
 
             large = img.copy()
             large.thumbnail((1200, 1200))
-            large.save(os.path.join(S3_QUARANTINE, large_filename), "JPEG")
+            large.save(os.path.join(S3_QUARANTINE, large_filename), save_format)
 
         # 4. PROMOTION: Quarantine -> Long-Term (category-specific subdirectory)
         # Category-specific uploads (sales, profile, logo) use their own directory;
