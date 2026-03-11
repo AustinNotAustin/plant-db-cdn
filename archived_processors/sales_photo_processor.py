@@ -6,11 +6,10 @@ import random
 import os
 import httpx
 
-from io import BytesIO
-from PIL import Image, ImageDraw
-
 from aws_services.config import CALLBACK_SECRET, CDN_SALES_IMGS
 from aws_services.sales_photo_schema import SalesPhotoBatchRequest, WebhookPayload, SalesPhotoItem
+from io import BytesIO
+from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
 

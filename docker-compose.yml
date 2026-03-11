@@ -1,7 +1,7 @@
 services:
   mock-cdn:
     build: .
-    container_name: plant-db-mock-cdn
+    container_name: mock-cdn
     ports:
       - "${PORT}:${PORT}"
     volumes:

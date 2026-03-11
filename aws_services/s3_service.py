@@ -1,17 +1,17 @@
+import aiofiles
 import logging
 import os
-import shutil
 
-from fastapi import BackgroundTasks, UploadFile, File, Form, Response, HTTPException, Depends
+from fastapi import UploadFile, Form, Response, HTTPException, Depends
+from typing import Annotated
 
 from .auth import verify_s3_signature, validate_policy_json
 from .config import S3_INBOX
-from .lambda_processor import s3_trigger_handler
 
 logger = logging.getLogger(__name__)
 
-# --- AWS S3 ENDPOINT ---
 
+# --- AWS S3 ENDPOINT ---
 class S3AuthParams:
     def __init__(
         self,
@@ -41,11 +41,11 @@ class S3AuthParams:
         self.aws_access_key_id = aws_access_key_id
         self.legacy_signature = legacy_signature
 
+
 async def mock_s3_presigned_post_handler(
-    background_tasks: BackgroundTasks,
     file: UploadFile,
     bucket_name: str,
-    s3_params: S3AuthParams = Depends()
+    s3_params: Annotated[S3AuthParams, Depends()]
 ):
     """
     Full Parity S3 Presigned POST Endpoint.
@@ -71,29 +71,18 @@ async def mock_s3_presigned_post_handler(
         logger.warning("[Auth] No policy/signature provided. Skipping verification (Mock Mode).")
 
     # 2. STORAGE (Landing Zone)
-    storage_filename = f"{s3_params.upload_id}_{os.path.basename(s3_params.key)}"
+    # Strictly trust the requested S3 Key for parity (matches Image Worker expectations)
+    storage_filename = os.path.basename(s3_params.key)
     inbox_path = os.path.join(S3_INBOX, storage_filename)
     
     try:
-        with open(inbox_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        async with aiofiles.open(inbox_path, mode="wb") as buffer:
+            content = await file.read()
+            await buffer.write(content)
     except Exception as e:
         logger.error(f"[S3 Service] IO Error writing to inbox: {str(e)}")
         raise HTTPException(status_code=500, detail="InternalStorageError")
-    
-    # 3. EVENT TRIGGER (Lambda Simulation)
-    logger.info(f"[S3 Service] Object created: {s3_params.key}. Triggering lambda...")
-    try:
-        background_tasks.add_task(
-            s3_trigger_handler,
-            inbox_path,
-            s3_params.upload_id,
-            s3_params.plant_id,
-            s3_params.image_category,
-        )
-    except Exception as e:
-        logger.error(f"[S3 Service] Task handoff FAILED: {str(e)}")
-        # Note: In real S3, the upload succeeds even if the trigger has issues (async)
+
     
     # 4. RESPONSE PARITY (XML)
     location = f"http://app.localhost/cdn/{storage_filename}"

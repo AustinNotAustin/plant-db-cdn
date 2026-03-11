@@ -5,10 +5,16 @@ import os
 import shutil
 from PIL import Image
 
-from .config import (
-    S3_QUARANTINE, S3_LONGTERM,
-    CDN_FULL_IMGS, CDN_THUMB_IMGS, CDN_SALES_IMGS, CDN_PROFILE_PICS, CDN_COMPANY_LOGOS,
-    CALLBACK_URL, CALLBACK_SECRET,
+from aws_services.config import (
+    S3_QUARANTINE,
+    S3_LONGTERM,
+    CDN_FULL_IMGS,
+    CDN_THUMB_IMGS,
+    CDN_SALES_IMGS,
+    CDN_PROFILE_PICS,
+    CDN_COMPANY_LOGOS,
+    CALLBACK_URL,
+    CALLBACK_SECRET,
 )
 
 # Maps image_category metadata values to their long-term storage directory
