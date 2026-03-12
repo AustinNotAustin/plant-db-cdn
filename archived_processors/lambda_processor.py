@@ -13,7 +13,6 @@ from aws_services.config import (
     CDN_SALES_IMGS,
     CDN_PROFILE_PICS,
     CDN_COMPANY_LOGOS,
-    CALLBACK_URL,
     CALLBACK_SECRET,
 )
 

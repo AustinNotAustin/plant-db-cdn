@@ -6,7 +6,8 @@ import aiofiles
 
 from aws_services.config import PORT, S3_LONGTERM, S3_INBOX
 from aws_services.s3_service import mock_s3_presigned_post_handler, S3AuthParams
-from fastapi import FastAPI, UploadFile, File, Form, Response, Depends, Request
+from fastapi import FastAPI, UploadFile, File, Form, Response, Depends, Request, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from typing import Annotated
@@ -35,8 +36,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.mount("/cdn", StaticFiles(directory=S3_LONGTERM), name="cdn")
-app.mount("/s3_inbox", StaticFiles(directory=S3_INBOX), name="internal-inbox")
 
+@app.get(
+    "/s3_inbox/{path:path}",
+    responses={404: {"description": "File not found"}}
+)
+async def get_inbox_file(path: str):
+    """
+    Custom GET handler for s3_inbox to support extensionless blobs.
+    """
+    file_path = os.path.join(S3_INBOX, path)
+    if not os.path.isfile(file_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path, media_type="application/octet-stream")
 
 @app.api_route("/health", methods=["GET", "OPTIONS"])
 async def cdn_health_check():
@@ -47,11 +59,22 @@ async def cdn_health_check():
 async def s3_put_object(bucket_name: str, key: str, request: Request):
     """
     Mock S3 PUT Object endpoint for Image Worker write-backs.
-    Saves binary data directly to S3_LONGTERM (mapped to bucket).
+    STRICT ENFORCEMENT: Only allows 'company_X/plant_Y' hierarchical paths.
     """
-    # In this mock, we assume bucket_name is relevant but we map primarily to S3_LONGTERM structure
-    # which mirrors the production bucket layout.
+    # 1. Strict Hierarchy Validation: Every key MUST start with company_
+    if not key.startswith("company_"):
+        logger.error(f"[S3 Mock] PUT AccessDenied: Key '{key}' violates company hierarchy policy.")
+        return Response(content="AccessDenied (Strict Company Hierarchy Required)", status_code=403)
+
     target_path = os.path.join(S3_LONGTERM, key)
+    
+    # 2. Prevent directory traversal/root-sprawl hacks
+    # Check that it follows standard pattern: company_ID/plant_ID/filename
+    parts = key.split("/")
+    if len(parts) < 3 or not parts[1].startswith("plant_"):
+         logger.error(f"[S3 Mock] PUT AccessDenied: Key '{key}' missing required plant_ folder.")
+         return Response(content="AccessDenied (Invalid Object Path Depth)", status_code=403)
+
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
     
     body = await request.body()

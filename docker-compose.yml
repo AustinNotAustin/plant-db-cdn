@@ -12,8 +12,6 @@ services:
       - ./s3_longterm:/app/s3_longterm
     environment:
       - PORT=${PORT}
-      - CALLBACK_URL=${CALLBACK_URL}
-      - CALLBACK_SECRET=${CALLBACK_SECRET}
     networks:
       - plant-db-network
 

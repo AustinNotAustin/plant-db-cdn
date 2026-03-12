@@ -1,82 +1,55 @@
-# Plant-DB Mock CDN Image Receiver (AWS S3 Parity)
+# Plant-DB Mock CDN (Dumb S3 Mimic)
 
-This service simulates AWS S3 (Presigned POST), AWS Lambda (Triggered Processing), and AWS CloudFront (CDN) for the Plant-DB system. It provides high-fidelity AWS parity to ensure the Django backend can transition to production without code changes.
+This service simulates AWS S3 (Presigned POST and PutObject) and AWS CloudFront (CDN) for the Plant-DB system. It provides high-fidelity AWS parity to ensure the Django backend can transition to production without code changes while strictly decoupling storage from compute.
 
 ## Features
-- **S3 Presigned POST Parity**: Handles `POST /{bucket}` with `multipar/form-data` and `x-amz-meta-*` headers.
-- **Two-Stage Storage (Scanning)**: Mimics enterprise security flows (Temp Storage -> Validation/Scan -> Long-Term Storage).
-- **Lambda Simulation**: Async background processing using Pillow for EXIF stripping and generating variant (Thumbnail/Large) images.
+- **S3 Presigned POST Parity**: Handles `POST /{bucket}` with `multipart/form-data` and `x-amz-meta-*` headers.
+- **S3 PutObject Parity**: Supports `PUT /{bucket}/{key}` for direct worker write-backs.
+- **Dumb Storage**: No image processing, no internal webhooks, no compute dependencies.
+- **Multi-tenant Hierarchy**: Strictly enforces `company_X/plant_Y/` directory structures.
 - **CloudFront Parity**: Serves processed images via a simulated CDN structure.
-- **Async Callback**: Notifies the Django backend with `Bearer` token authentication and specific status payloads.
 
 ## API Specification
 
 ### 1. Mock S3 Presigned POST
 `POST /{bucket_name}`
-- Supports standard S3 metadata headers:
-  - `x-amz-meta-plant-id`: Internal Plant ID.
-  - `x-amz-meta-upload-id`: Unique Photo Upload ID.
-- Content-Type: `multipart/form-data`.
+- Supports standard S3 metadata headers.
 - Response: `201 Created` with S3-standard XML payload.
 
-### 2. AWS Lambda Simulation (Callback)
-Triggered automatically after upload:
-1. **Malware/Content Scan**: Simulated 1s delay and basic validation.
-2. **Image Processing**: EXIF stripping + Resizing (200px Thumb, 1200px Large).
-3. **Storage Tiering**: Moves valid files from `temp_uploads/` to `storage/`.
-4. **Callback (Django/Backend)**: Sends a JSON POST to `CALLBACK_URL` with `Bearer {CALLBACK_SECRET}`.
-
-**Callback Payload (Success):**
-```json
-{
-  "upload_id": "uuid",
-  "plant_id": "123",
-  "status": "success",
-  "large_url": "http://localhost:8001/cdn/large_uuid.jpg",
-  "thumb_url": "http://localhost:8001/cdn/thumb_uuid.jpg"
-}
-```
-
-**Callback Payload (Failure):**
-```json
-{
-  "upload_id": "uuid",
-  "plant_id": "123",
-  "status": "failed",
-  "error": "Image validation failed..."
-}
-```
+### 2. Mock S3 PutObject
+`PUT /{bucket_name}/{key:path}`
+- Used by the **Image Worker** to store processed variants.
+- Enforces strict multi-tenant pathing.
 
 ### 3. CDN Endpoints
-- `GET /cdn/{filename}`: Access images in the `storage/` directory.
+- `GET /cdn/{path:path}`: Access images in the `s3_longterm/` directory.
 
-## Infrastructure & Architecture (AWS Parity)
-The service is decomposed into modular files that map directly to AWS managed services:
+## Infrastructure & Architecture (Pure Storage)
+The service is a "Dumb Store," meaning it only provides storage and retrieval. All compute (resizing, processing) is handled by the external **Image Worker**.
 
 ### 1. AWS S3 Service (`aws_services/s3_service.py`)
 - Emulates the **S3 API Layer**.
-- Responsible for the initial `POST` landing (Simulated S3 Bucket Inbox).
-- Decoupled from processing; it only commits the object and signals the event trigger.
+- Responsible for the initial `POST` landing into `s3_inbox/`.
 
-### 2. AWS Lambda Processor (`aws_services/lambda_processor.py`)
-- Emulates the **Serverless Compute Layer**.
-- Contains all image processing code, security scans, and status callbacks.
-- Maintains zero-state; operates locally on "Quarantine" storage (Simulated Lambda Temp Disk).
-
-### 3. Global Architecture Config (`aws_services/config.py`)
+### 2. Global Architecture Config (`aws_services/config.py`)
 - Defines the **AWS Physical Boundaries** (S3 Buckets/Storage Tiers).
-- Ensures strict configuration for local network and auth secrets.
 
-### 4. CDN / CloudFront (`main.py`)
+### 3. CDN / CloudFront (`main.py`)
 - Provides the entry mapping for static asset delivery via `s3_longterm`.
+- Implements `PUT` and `GET` handlers for worker parity.
 
 ## Setup & Running
-1. **Configure Environment**: Copy `.env.example` to `.env` and set `CALLBACK_URL` and `CALLBACK_SECRET`.
+1. **Configure Environment**: Ensure `PORT` and `BASE_URL` are set in `.env`.
 2. **Start Service (Docker - Recommended)**:
    ```bash
    ./starter.sh start --build
    ```
-3. **Run Security Audit**:
-   ```bash
-   ./starter.sh scan
-   ```
+3. **Storage Access**:
+   - Raw Uploads (Inbox): `s3_inbox/`
+   - Processed Photos (CDN): `s3_longterm/`
+   - Public CDN URL: `http://localhost:8001/cdn/`
+
+## Development & Cleanup
+- **Clear Storage**: `docker compose exec mock-cdn find /app/s3_inbox /app/s3_longterm -mindepth 1 -delete`
+- **Security Scan**: `./starter.sh scan`
+- **Archived Logic**: Legacy image processing code is preserved in `archived_processors/` for reference but is not used in the runtime.

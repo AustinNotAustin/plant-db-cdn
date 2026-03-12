@@ -12,7 +12,7 @@ if [ -f .env ]; then
 fi
 
 # Validation: Ensure all required variables are set after loading .env
-REQUIRED_VARS=("PORT" "CALLBACK_URL" "CALLBACK_SECRET")
+REQUIRED_VARS=("PORT" "BASE_URL")
 for VAR in "${REQUIRED_VARS[@]}"; do
   if [ -z "${!VAR}" ]; then
     echo "Error: Required environment variable '$VAR' is not set in .env"

@@ -72,10 +72,18 @@ async def mock_s3_presigned_post_handler(
 
     # 2. STORAGE (Landing Zone)
     # Strictly trust the requested S3 Key for parity (matches Image Worker expectations)
-    storage_filename = os.path.basename(s3_params.key)
-    inbox_path = os.path.join(S3_INBOX, storage_filename)
+    # 2. STORAGE (Landing Zone)
+    # Strictly preserve the requested S3 Key hierarchy for multi-tenant parity
+    relative_key = s3_params.key
+    if relative_key.startswith("s3_inbox/"):
+        relative_key = relative_key.replace("s3_inbox/", "", 1)
+        
+    inbox_path = os.path.join(S3_INBOX, relative_key)
     
     try:
+        # Ensure any subdirectories (company_X/plant_Y/...) exist before writing
+        os.makedirs(os.path.dirname(inbox_path), exist_ok=True)
+        
         async with aiofiles.open(inbox_path, mode="wb") as buffer:
             content = await file.read()
             await buffer.write(content)
@@ -85,7 +93,8 @@ async def mock_s3_presigned_post_handler(
 
     
     # 4. RESPONSE PARITY (XML)
-    location = f"http://app.localhost/cdn/{storage_filename}"
+    # Location reflects the true hierarchical path for internal consumption
+    location = f"http://app.localhost/s3_inbox/{relative_key}"
     xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <PostResponse>
     <Location>{location}</Location>

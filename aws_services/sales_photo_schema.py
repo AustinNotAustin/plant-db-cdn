@@ -9,7 +9,6 @@ class SalesPhotoItem(BaseModel):
 class SalesPhotoBatchRequest(BaseModel):
     batch_id: int
     company_id: int
-    callback_url: str
     items: List[SalesPhotoItem]
 
 class WebhookPayload(BaseModel):
