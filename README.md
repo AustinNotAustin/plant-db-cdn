@@ -19,6 +19,8 @@ This service simulates AWS S3 (Presigned POST and PutObject) and AWS CloudFront 
 ### 2. Mock S3 PutObject
 `PUT /{bucket_name}/{key:path}`
 - Used by the **Image Worker** to store processed variants.
+- **Authentication**: Requires valid AWS SigV4 signatures (verified against `AWS_S3_SECRET_ACCESS_KEY`).
+- **Owner Verification**: Optionally verifies `x-amz-expected-bucket-owner` header if `AWS_ACCOUNT_ID` is configured.
 - Enforces strict multi-tenant pathing.
 
 ### 3. CDN Endpoints

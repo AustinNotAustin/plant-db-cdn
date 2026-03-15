@@ -17,6 +17,7 @@ class S3AuthParams:
         self,
         key: str = Form(...),
         plant_id: str = Form(..., alias="x-amz-meta-plant-id"),
+        company_id: str = Form(..., alias="x-amz-meta-company-id"),
         upload_id: str = Form(..., alias="x-amz-meta-upload-id"),
         image_category: str = Form("plant", alias="x-amz-meta-image-category"),
         policy: str = Form(None, alias="Policy"),
@@ -30,6 +31,7 @@ class S3AuthParams:
     ):
         self.key = key
         self.plant_id = plant_id
+        self.company_id = company_id
         self.upload_id = upload_id
         self.image_category = image_category
         self.policy = policy

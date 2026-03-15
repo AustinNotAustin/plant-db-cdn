@@ -14,12 +14,12 @@ def get_env_or_raise(key: str) -> str:
 
 
 # --- AWS PHYSICAL STORAGE TIERS (Simulated Buckets) ---
-PORT = int(get_env_or_raise("PORT"))
+SRV_CDN_PORT = int(get_env_or_raise("SRV_CDN_PORT"))
 S3_INBOX = "s3_inbox"               # Equivalent to the Landing S3 Bucket
 S3_QUARANTINE = "s3_quarantine"     # Temporary processing zone (Simulates Lambda ephemeral disk)
 S3_LONGTERM = "s3_longterm"         # Equivalent to the Production Storage/CDN S3 Bucket
 
-BASE_URL = get_env_or_raise("BASE_URL")
+SRV_CDN_URL = get_env_or_raise("SRV_CDN_URL")
 
 # Ensure physical directory structure for the tiering system
 for d in [S3_INBOX, S3_QUARANTINE, S3_LONGTERM]:

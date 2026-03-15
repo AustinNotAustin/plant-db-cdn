@@ -7,12 +7,12 @@ set -e
 
 # Load environment variables if .env exists
 if [ -f .env ]; then
-  # Filter out lines that are not valid shell variable assignments
-  export $(grep -v '^#' .env | xargs)
+  # Strip inline comments and whitespace before exporting
+  export $(grep -v '^#' .env | sed 's/#.*//' | xargs)
 fi
 
 # Validation: Ensure all required variables are set after loading .env
-REQUIRED_VARS=("PORT" "BASE_URL")
+REQUIRED_VARS=("SRV_CDN_PORT" "SRV_CDN_URL")
 for VAR in "${REQUIRED_VARS[@]}"; do
   if [ -z "${!VAR}" ]; then
     echo "Error: Required environment variable '$VAR' is not set in .env"
@@ -25,7 +25,7 @@ OPTION=$2
 
 case $COMMAND in
   start)
-    echo "--- Starting Mock CDN via Docker Compose (Port: $PORT) ---"
+    echo "--- Starting Mock CDN via Docker Compose (Port: $SRV_CDN_PORT) ---"
     if [ "$OPTION" == "--build" ]; then
       docker compose build
     fi
@@ -46,11 +46,11 @@ esac
 # Summary
 echo ""
 echo "✅ Mock CDN started successfully!"
-echo "   Endpoint: http://localhost:$PORT"
-echo "   CDN Storage: http://localhost:$PORT/cdn"
+echo "   Endpoint: http://localhost:$SRV_CDN_PORT"
+echo "   CDN Storage: http://localhost:$SRV_CDN_PORT/cdn"
 echo ""
 echo "API Documentation:"
-echo "   Swagger UI: http://localhost:$PORT/docs"
-echo "   ReDoc:      http://localhost:$PORT/redoc"
+echo "   Swagger UI: http://localhost:$SRV_CDN_PORT/docs"
+echo "   ReDoc:      http://localhost:$SRV_CDN_PORT/redoc"
 echo ""
 echo "To stop the service, run: ./starter.sh stop"
