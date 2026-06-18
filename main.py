@@ -5,12 +5,16 @@ import os
 import aiofiles
 
 from aws_services.auth import verify_s3_v4_signature
-from aws_services.config import SRV_CDN_PORT, S3_LONGTERM, S3_INBOX
+from aws_services.config import (
+    SRV_CDN_PORT,
+    S3_DEFAULT_CDN_BUCKET,
+    S3_ENFORCE_PLANT_HIERARCHY,
+    get_object_path,
+)
 from aws_services.s3_service import mock_s3_presigned_post_handler, S3AuthParams
-from fastapi import FastAPI, UploadFile, File, Form, Response, Depends, Request, HTTPException
+from fastapi import FastAPI, UploadFile, File, Response, Depends, Request, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from typing import Annotated
 
 
@@ -23,7 +27,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-app = FastAPI(title="Mock AWS Service Architecture (Modular)")
+app = FastAPI(title="Mock AWS S3/CDN")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -36,20 +40,26 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "OPTIONS"],
     allow_headers=["*"],
 )
-app.mount("/cdn", StaticFiles(directory=S3_LONGTERM), name="cdn")
 
-@app.get(
-    "/s3_inbox/{path:path}",
-    responses={404: {"description": "File not found"}}
-)
-async def get_inbox_file(path: str):
-    """
-    Custom GET handler for s3_inbox to support extensionless blobs.
-    """
-    file_path = os.path.join(S3_INBOX, path)
+
+def _file_response(bucket_name: str, key: str) -> FileResponse:
+    try:
+        file_path = get_object_path(bucket_name, key)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="InvalidObjectKey")
+
     if not os.path.isfile(file_path):
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path, media_type="application/octet-stream")
+
+
+@app.get("/cdn/{path:path}", responses={404: {"description": "File not found"}})
+async def get_cdn_file(path: str):
+    """
+    Legacy CDN shortcut. Serves objects from the configured default CDN bucket.
+    """
+    return _file_response(S3_DEFAULT_CDN_BUCKET, path)
+
 
 @app.api_route("/health", methods=["GET", "OPTIONS"])
 async def cdn_health_check():
@@ -61,26 +71,28 @@ async def s3_put_object(bucket_name: str, key: str, request: Request):
     """
     Mock S3 PUT Object endpoint for Image Worker write-backs.
     Verifies SigV4 signature for authentication and owner consistency.
-    STRICT ENFORCEMENT: Only allows 'company_X/plant_Y' hierarchical paths.
+    Optional legacy enforcement allows only 'company_X/plant_Y' hierarchical paths.
     """
     # 0. SigV4 Authentication Check
     if not await verify_s3_v4_signature(request):
         logger.error(f"[S3 Mock] PUT AccessDenied: Invalid SigV4 signature for {bucket_name}/{key}")
         return Response(content="SignatureDoesNotMatch (Invalid AWS Signature)", status_code=403)
 
-    # 1. Strict Hierarchy Validation: Every key MUST start with company_
-    if not key.startswith("company_"):
-        logger.error(f"[S3 Mock] PUT AccessDenied: Key '{key}' violates company hierarchy policy.")
-        return Response(content="AccessDenied (Strict Company Hierarchy Required)", status_code=403)
+    if S3_ENFORCE_PLANT_HIERARCHY:
+        if not key.startswith("company_"):
+            logger.error(f"[S3 Mock] PUT AccessDenied: Key '{key}' violates company hierarchy policy.")
+            return Response(content="AccessDenied (Strict Company Hierarchy Required)", status_code=403)
 
-    target_path = os.path.join(S3_LONGTERM, bucket_name, key)
-    
-    # 2. Prevent directory traversal/root-sprawl hacks
-    # Check that it follows standard pattern: company_ID/plant_ID/filename
-    parts = key.split("/")
-    if len(parts) < 3 or not parts[1].startswith("plant_"):
-         logger.error(f"[S3 Mock] PUT AccessDenied: Key '{key}' missing required plant_ folder.")
-         return Response(content="AccessDenied (Invalid Object Path Depth)", status_code=403)
+        parts = key.split("/")
+        if len(parts) < 3 or not parts[1].startswith("plant_"):
+            logger.error(f"[S3 Mock] PUT AccessDenied: Key '{key}' missing required plant_ folder.")
+            return Response(content="AccessDenied (Invalid Object Path Depth)", status_code=403)
+
+    try:
+        target_path = get_object_path(bucket_name, key)
+    except ValueError:
+        logger.error(f"[S3 Mock] PUT InvalidObjectKey: {bucket_name}/{key}")
+        return Response(content="InvalidObjectKey", status_code=400)
 
     os.makedirs(os.path.dirname(target_path), exist_ok=True)
     
@@ -93,6 +105,14 @@ async def s3_put_object(bucket_name: str, key: str, request: Request):
     except Exception as e:
         logger.error(f"[S3 Mock] PUT Object FAILED: {str(e)}")
         return Response(content=str(e), status_code=500)
+
+
+@app.get("/{bucket_name}/{key:path}", responses={404: {"description": "File not found"}})
+async def s3_get_object(bucket_name: str, key: str):
+    """
+    Mock S3 GET Object endpoint.
+    """
+    return _file_response(bucket_name, key)
 
 
 @app.post("/{bucket_name}", status_code=201)

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Simple Starter Script for Mock CDN (Plant-DB)
+# Simple Starter Script for Mock S3/CDN
 # Usage: ./starter.sh [start|stop]
 
 set -e
@@ -25,15 +25,14 @@ OPTION=$2
 
 case $COMMAND in
   start)
-    echo "--- Starting Mock CDN via Docker Compose (Port: $SRV_CDN_PORT) ---"
+    echo "--- Starting Mock S3/CDN via Docker Compose (Port: $SRV_CDN_PORT) ---"
     if [ "$OPTION" == "--build" ]; then
       docker compose build
     fi
     docker compose up -d
     ;;
   stop)
-    echo "--- Stopping Mock CDN ---"
-    # Stop Docker services
+    echo "--- Stopping Mock S3/CDN ---"
     docker compose down || true
     exit 0
     ;;
@@ -45,7 +44,7 @@ esac
 
 # Summary
 echo ""
-echo "✅ Mock CDN started successfully!"
+echo "Mock S3/CDN started successfully."
 echo "   Endpoint: http://localhost:$SRV_CDN_PORT"
 echo "   CDN Storage: http://localhost:$SRV_CDN_PORT/cdn"
 echo ""
