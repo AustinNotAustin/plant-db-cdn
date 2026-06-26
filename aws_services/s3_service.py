@@ -6,7 +6,7 @@ from fastapi import UploadFile, Form, Response, HTTPException, Depends
 from typing import Annotated
 
 from .auth import verify_s3_signature, validate_policy_json
-from .config import get_object_path
+from .config import SRV_MOCK_S3_URL, get_object_path
 
 logger = logging.getLogger(__name__)
 
@@ -16,30 +16,28 @@ class S3AuthParams:
     def __init__(
         self,
         key: str = Form(...),
-        plant_id: str | None = Form(None, alias="x-amz-meta-plant-id"),
-        company_id: str | None = Form(None, alias="x-amz-meta-company-id"),
-        upload_id: str | None = Form(None, alias="x-amz-meta-upload-id"),
-        image_category: str = Form("plant", alias="x-amz-meta-image-category"),
-        policy: str = Form(None, alias="Policy"),
-        signature: str = Form(None, alias="X-Amz-Signature"),
-        credential: str = Form(None, alias="X-Amz-Credential"),
-        algorithm: str = Form(None, alias="X-Amz-Algorithm"),
-        date: str = Form(None, alias="X-Amz-Date"),
-        security_token: str = Form(None, alias="X-Amz-Security-Token"),
+        policy: str = Form(None, alias="policy"),
+        policy_legacy: str = Form(None, alias="Policy"),
+        signature: str = Form(None, alias="x-amz-signature"),
+        signature_legacy: str = Form(None, alias="X-Amz-Signature"),
+        credential: str = Form(None, alias="x-amz-credential"),
+        credential_legacy: str = Form(None, alias="X-Amz-Credential"),
+        algorithm: str = Form(None, alias="x-amz-algorithm"),
+        algorithm_legacy: str = Form(None, alias="X-Amz-Algorithm"),
+        date: str = Form(None, alias="x-amz-date"),
+        date_legacy: str = Form(None, alias="X-Amz-Date"),
+        security_token: str = Form(None, alias="x-amz-security-token"),
+        security_token_legacy: str = Form(None, alias="X-Amz-Security-Token"),
         aws_access_key_id: str = Form(None, alias="AWSAccessKeyId"),
-        legacy_signature: str = Form(None, alias="signature")
+        legacy_signature: str = Form(None, alias="signature"),
     ):
         self.key = key
-        self.plant_id = plant_id
-        self.company_id = company_id
-        self.upload_id = upload_id
-        self.image_category = image_category
-        self.policy = policy
-        self.signature = signature
-        self.credential = credential
-        self.algorithm = algorithm
-        self.date = date
-        self.security_token = security_token
+        self.policy = policy or policy_legacy
+        self.signature = signature or signature_legacy
+        self.credential = credential or credential_legacy
+        self.algorithm = algorithm or algorithm_legacy
+        self.date = date or date_legacy
+        self.security_token = security_token or security_token_legacy
         self.aws_access_key_id = aws_access_key_id
         self.legacy_signature = legacy_signature
 
@@ -58,7 +56,7 @@ async def mock_s3_presigned_post_handler(
     if s3_params.policy and active_signature:
         logger.info(f"[Auth] Verifying signature for bucket: {bucket_name}")
         
-        if not verify_s3_signature(s3_params.policy, active_signature):
+        if not verify_s3_signature(s3_params.policy, active_signature, s3_params.credential):
             logger.error("[Auth] SignatureDoesNotMatch")
             raise HTTPException(status_code=403, detail="SignatureDoesNotMatch")
             
@@ -92,8 +90,8 @@ async def mock_s3_presigned_post_handler(
 
     
     # 4. RESPONSE PARITY (XML)
-    # Location reflects the true hierarchical path for internal consumption
-    location = f"http://app.localhost/{bucket_name}/{relative_key}"
+    # Location reflects the true hierarchical path for internal consumption.
+    location = f"{SRV_MOCK_S3_URL}/{bucket_name}/{relative_key}"
     xml_content = f"""<?xml version="1.0" encoding="UTF-8"?>
 <PostResponse>
     <Location>{location}</Location>

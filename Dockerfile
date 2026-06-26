@@ -21,4 +21,4 @@ RUN mkdir -p s3_buckets && chmod -R 777 s3_buckets
 EXPOSE 8001
 
 # Run the application with uvicorn and enable reload for iterative development
-CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+CMD ["sh", "-c", "python -m uvicorn main:app --host 0.0.0.0 --port ${SRV_MOCK_S3_PORT:-8001} --reload"]

@@ -10,7 +10,7 @@ This project follows the **Investigation-First Hardening** approach to prevent s
 - Install: `./.venv/bin/python -m pip install --require-hashes -r requirements.txt`
 - Audit: `./scripts/security-scan.sh`
 
-### Python (Mock CDN Application)
+### Python (Mock S3 Application)
 - **Source**: `requirements.in` (Direct dependencies only).
 - **Lockfile**: `requirements.txt` (Generated with SHA256 hashes for integrity).
 - **Workflow**:
@@ -25,7 +25,7 @@ We use a unified scanning entrypoint: `./scripts/security-scan.sh`.
 ### Tools Integrated:
 - **pip-audit**: Checks Python dependencies against the PyPA advisory database (Google OSV). No login required.
 
-## 3. Storage and Data Hardening (Mock CDN Specific)
+## 3. Storage and Data Hardening (Mock S3 Specific)
 
 - **EXIF Stripping**: The application automatically strips metadata from all uploaded images using Pillow to prevent data leakage (location, camera info).
 - **Mock S3 Structure**: Simulates partitioned storage (`storage/`, `thumbnails/`, `large/`) to isolate processed assets.
@@ -52,7 +52,7 @@ jobs:
       - name: Install Scan Tools
         run: pip install pip-audit
         
-      - name: CDN Application Audit
+      - name: Mock S3 Application Audit
         run: pip-audit -r requirements.txt
 ```
 

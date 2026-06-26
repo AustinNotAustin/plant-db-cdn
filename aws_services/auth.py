@@ -119,11 +119,17 @@ async def verify_s3_v4_signature(request):
         return False
 
 
-def verify_s3_signature(policy_b64: str, signature_provided: str) -> bool:
+def _sigv4_signing_key(secret_key: str, date: str, region: str, service: str) -> bytes:
+    date_key = hmac.new(f"AWS4{secret_key}".encode("utf-8"), date.encode("utf-8"), hashlib.sha256).digest()
+    region_key = hmac.new(date_key, region.encode("utf-8"), hashlib.sha256).digest()
+    service_key = hmac.new(region_key, service.encode("utf-8"), hashlib.sha256).digest()
+    return hmac.new(service_key, b"aws4_request", hashlib.sha256).digest()
+
+
+def verify_s3_signature(policy_b64: str, signature_provided: str, credential: str | None = None) -> bool:
     """
-    Verifies an S3 Signature against the provided Policy.
-    Note: For simplicity in this mock, we verify SigV2/Post-Style signatures
-    which is just HMAC-SHA1 or SHA256 of the policy.
+    Verifies an S3 POST policy signature.
+    Supports boto3 SigV4 presigned POST fields and a loose legacy fallback.
     """
     if not AWS_S3_SECRET_ACCESS_KEY:
         logger.error("Signature verification skipped: No AWS_S3_SECRET_ACCESS_KEY.")
@@ -134,8 +140,22 @@ def verify_s3_signature(policy_b64: str, signature_provided: str) -> bool:
         return False
 
     try:
-        # standard S3 Post Policy signature is HMAC-SHA1 of the base64 policy
-        # but SigV4 uses SHA256. We'll check both for robustness in mocking.
+        if credential:
+            # AWS4-HMAC-SHA256 Credential=ACCESS/DATE/REGION/s3/aws4_request
+            credential_parts = credential.split("/")
+            if len(credential_parts) >= 5 and credential_parts[3] == "s3":
+                access_key, date, region, service = credential_parts[:4]
+                if AWS_S3_ACCESS_KEY_ID and access_key != AWS_S3_ACCESS_KEY_ID:
+                    logger.error("Signature verification failed: access key mismatch.")
+                    return False
+                signing_key = _sigv4_signing_key(AWS_S3_SECRET_ACCESS_KEY, date, region, service)
+                expected_v4 = hmac.new(signing_key, policy_b64.encode("utf-8"), hashlib.sha256).hexdigest()
+                if hmac.compare_digest(expected_v4, signature_provided):
+                    return True
+                logger.error("SigV4 POST policy signature mismatch.")
+                return False
+
+        # Legacy/mock fallback: HMAC-SHA1 base64 or raw-secret HMAC-SHA256.
         
         # SigV2/Standard Post Policy format
         expected_sig = base64.b64encode(

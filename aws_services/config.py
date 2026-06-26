@@ -13,22 +13,16 @@ def get_env_or_raise(key: str) -> str:
     return value
 
 
-# --- AWS PHYSICAL STORAGE TIERS (Simulated Buckets) ---
-SRV_CDN_PORT = int(get_env_or_raise("SRV_CDN_PORT"))
-SRV_CDN_URL = get_env_or_raise("SRV_CDN_URL")
+# --- Mock S3 service config ---
+SRV_MOCK_S3_PORT = int(os.getenv("SRV_MOCK_S3_PORT", "8001"))
+SRV_MOCK_S3_URL = os.getenv("SRV_MOCK_S3_URL", f"http://localhost:{SRV_MOCK_S3_PORT}").rstrip("/")
 
 S3_STORAGE_ROOT = os.getenv("S3_STORAGE_ROOT", "s3_buckets")
-S3_DEFAULT_CDN_BUCKET = os.getenv("S3_DEFAULT_CDN_BUCKET", "s3_longterm")
-S3_ENFORCE_PLANT_HIERARCHY = os.getenv("S3_ENFORCE_PLANT_HIERARCHY", "").lower() in {
-    "1",
-    "true",
-    "yes",
-}
-
-# Legacy bucket names kept for Plant-DB compatibility.
+S3_DEFAULT_PUBLIC_BUCKET = os.getenv("S3_DEFAULT_PUBLIC_BUCKET", "s3_longterm")
+# Default bucket names used by local examples.
 S3_INBOX_BUCKET = os.getenv("S3_INBOX_BUCKET", "s3_inbox")
 S3_QUARANTINE_BUCKET = os.getenv("S3_QUARANTINE_BUCKET", "s3_quarantine")
-S3_LONGTERM_BUCKET = os.getenv("S3_LONGTERM_BUCKET", S3_DEFAULT_CDN_BUCKET)
+S3_LONGTERM_BUCKET = os.getenv("S3_LONGTERM_BUCKET", S3_DEFAULT_PUBLIC_BUCKET)
 
 
 def get_bucket_path(bucket_name: str) -> str:

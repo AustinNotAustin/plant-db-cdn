@@ -1,65 +1,90 @@
-# Mock AWS S3/CDN
+# Mock S3
 
-This service simulates AWS S3 object storage for local services that need bucket-style uploads, downloads, and worker write-backs. It also exposes a small CDN shortcut for the configured public bucket.
+Mock S3 is a local S3-compatible object storage service for development. It supports bucket-style uploads, downloads, worker write-backs, and a small public-object shortcut for files in a configured public bucket.
 
 ## Features
-- **S3 Presigned POST Parity**: Handles `POST /{bucket}` with `multipart/form-data` and `x-amz-meta-*` headers.
-- **S3 PutObject/GetObject Parity**: Supports `PUT /{bucket}/{key}` and `GET /{bucket}/{key}`.
-- **Generic Buckets**: Stores objects under `S3_STORAGE_ROOT/{bucket}/{key}`.
-- **Dumb Storage**: No image processing, webhooks, or compute dependencies.
-- **Optional Plant-DB Compatibility**: Can enforce `company_X/plant_Y/` PUT paths with `S3_ENFORCE_PLANT_HIERARCHY=true`.
-- **CDN Shortcut**: Serves objects from `S3_DEFAULT_CDN_BUCKET` via `/cdn/{key}`.
 
-## API Specification
+- **S3 Presigned POST parity**: handles `POST /{bucket}` with `multipart/form-data` from boto3 `generate_presigned_post`.
+- **S3 PutObject/GetObject parity**: supports `PUT /{bucket}/{key}` and `GET /{bucket}/{key}`.
+- **Generic buckets**: stores objects under `S3_STORAGE_ROOT/{bucket}/{key}`.
+- **Dumb storage**: no image processing, scanning, webhooks, or compute behavior.
+- **Public shortcut**: serves objects from `S3_DEFAULT_PUBLIC_BUCKET` through `/cdn/{key}` for local browser testing.
 
-### 1. Mock S3 Presigned POST
+## API
+
+### Presigned POST
+
 `POST /{bucket_name}`
-- Supports standard S3 form fields plus optional metadata fields.
-- Stores the object at `S3_STORAGE_ROOT/{bucket_name}/{key}`.
-- Response: `201 Created` with S3-standard XML payload.
 
-### 2. Mock S3 PutObject
+- Accepts boto3 SigV4 presigned POST fields, including lowercase `policy` and `x-amz-*` fields.
+- Stores object at `S3_STORAGE_ROOT/{bucket_name}/{key}`.
+- Returns `201 Created` with S3-style XML.
+
+### PutObject
+
 `PUT /{bucket_name}/{key:path}`
+
 - Used by workers or local services to store objects.
-- **Authentication**: Requires valid AWS SigV4 signatures (verified against `AWS_S3_SECRET_ACCESS_KEY`).
-- **Owner Verification**: Optionally verifies `x-amz-expected-bucket-owner` header if `AWS_ACCOUNT_ID` is configured.
-- **Optional Legacy Policy**: Set `S3_ENFORCE_PLANT_HIERARCHY=true` to require `company_X/plant_Y/` keys.
+- Requires valid AWS SigV4 `Authorization` header when credentials are configured.
+- Optionally verifies `x-amz-expected-bucket-owner` when `AWS_ACCOUNT_ID` is configured.
 
-### 3. Mock S3 GetObject
+### GetObject
+
 `GET /{bucket_name}/{key:path}`
-- Returns the stored object bytes.
-- Returns `404` if the object does not exist.
 
-### 4. CDN Endpoint
-- `GET /cdn/{path:path}`: Access objects in `S3_DEFAULT_CDN_BUCKET`.
+- Returns stored object bytes.
+- Returns `404` when object does not exist.
 
-## Infrastructure & Architecture (Pure Storage)
-The service is a "Dumb Store," meaning it only provides storage and retrieval. All compute (resizing, processing, validation, indexing) belongs in external services.
+### Public Shortcut
 
-### 1. AWS S3 Service (`aws_services/s3_service.py`)
-- Emulates the **S3 API Layer**.
-- Responsible for Presigned POST writes into arbitrary buckets.
+`GET /cdn/{path:path}`
 
-### 2. Global Architecture Config (`aws_services/config.py`)
-- Defines the local storage root, default CDN bucket, and compatibility policy.
+- Reads from `S3_DEFAULT_PUBLIC_BUCKET`.
+- Exists for local browser testing, not as production CDN behavior.
 
-### 3. CDN / CloudFront (`main.py`)
-- Provides static delivery from the configured default bucket.
-- Implements `PUT` and `GET` handlers for S3 parity.
+## Setup
 
-## Setup & Running
-1. **Configure Environment**: Ensure `SRV_CDN_PORT` and `SRV_CDN_URL` are set in `.env`.
-2. **Start Service (Docker - Recommended)**:
-   ```bash
-   ./starter.sh start --build
-   ```
-3. **Storage Access**:
-   - Bucket root: `s3_buckets/`
-   - Example inbox bucket: `s3_buckets/s3_inbox/`
-   - Example CDN bucket: `s3_buckets/s3_longterm/`
-   - Public CDN URL: `http://localhost:8001/cdn/`
+Copy `.env-template` to `.env` and set:
 
-## Development & Cleanup
-- **Clear Storage**: `docker compose exec mock-s3 find /app/s3_buckets -mindepth 1 -delete`
-- **Security Scan**: `./scripts/security-scan.sh`
-- **Archived Logic**: Legacy image processing code is preserved in `archived_processors/` for reference but is not used in the runtime.
+```env
+AWS_ACCOUNT_ID=123456789012
+AWS_S3_ACCESS_KEY_ID=mock-access-key
+AWS_S3_SECRET_ACCESS_KEY=mock-secret-key
+SRV_MOCK_S3_PORT=8001
+SRV_MOCK_S3_URL=http://localhost:8001
+S3_STORAGE_ROOT=s3_buckets
+S3_DEFAULT_PUBLIC_BUCKET=s3_dev_media
+```
+
+Start:
+
+```bash
+./starter.sh start --build
+```
+
+URLs:
+
+- S3 endpoint: `http://localhost:8001`
+- Public shortcut: `http://localhost:8001/cdn/{key}`
+- Swagger UI: `http://localhost:8001/docs`
+
+## Using With Media Upload Architecture
+
+For a Django app using an S3 inbox plus scanner flow:
+
+```env
+AWS_S3_ACCESS_KEY_ID=mock-access-key
+AWS_S3_SECRET_ACCESS_KEY=mock-secret-key
+AWS_S3_REGION_NAME=us-east-1
+AWS_S3_BUCKET_NAME=s3_inbox
+AWS_S3_ENDPOINT_URL=http://localhost:8001
+AWS_S3_CUSTOM_DOMAIN=http://localhost:8001/cdn
+```
+
+Use `AWS_S3_ENDPOINT_URL=http://localhost:8001` when Django runs on the host. If Django runs in Docker on the same compose network, use `http://mock-s3:8001` for service-to-service access and make sure the browser receives a reachable upload URL.
+
+## Development
+
+- Clear storage: `docker compose exec mock-s3 find /app/s3_buckets -mindepth 1 -delete`
+- Security scan: `./scripts/security-scan.sh`
+- Plant-DB reference docs: legacy Plant-DB upload notes and archived processors live in `docs/plant-db-reference/` and are not used by runtime code.

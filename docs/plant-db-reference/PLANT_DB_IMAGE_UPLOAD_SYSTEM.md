@@ -8,7 +8,7 @@ The system consists of three primary components orchestrating a secure upload:
 
 1.  **Frontend (Client)**: The React/Vite application that orchestrates the user experience and handles the direct-to-S3 upload.
 2.  **Backend (Django)**: The API that manages metadata, generates secure "upload intents," and validates callbacks.
-3.  **CDN / Object Storage (AWS S3 / Mock CDN)**: The storage layer where files are actually persisted.
+3.  **Object Storage (AWS S3 / Mock S3)**: The storage layer where files are actually persisted.
 
 ---
 
@@ -20,15 +20,15 @@ The system consists of three primary components orchestrating a secure upload:
 When a user selects an image, the Frontend sends a `POST` request to the Backend (e.g., `/api/plants/{id}/upload-intent/`).
 - **Backend Role**: 
     - Validates that the user has permission to upload for this specific plant.
-    - Communicates with AWS S3 (or the Mock CDN) to generate a **Presigned POST** object.
+    - Communicates with AWS S3 (or Mock S3) to generate a **Presigned POST** object.
     - This object contains a temporary URL and a set of cryptographically signed fields (Policy, Signature, etc.) that authorize a single upload.
 - **Result**: The Frontend receives the temporary URL and required form fields.
 
 ### 2. Direct Binary Upload & Multi-Stage Validation
-**Frontend → S3 / CDN (Quarantine Layer)**
+**Frontend → S3 / Mock S3 (Quarantine Layer)**
 
 The Frontend performs a `multipart/form-data` POST directly to the S3 URL provided in Step 1.
-- **S3 / CDN (Temporary/Quarantine Layer) Role**:
+- **S3 / Mock S3 (Temporary/Quarantine Layer) Role**:
     - Validates the signature and policy.
     - If valid, accepts and persists binary data into **Temporary/Quarantine Storage**.
     - **Security & Integrity Analysis**: An automated trigger (e.g., S3 Event + Lambda) initiates a multi-point scan:

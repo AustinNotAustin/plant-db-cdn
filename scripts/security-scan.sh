@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Supply chain security scan script (A06:2025)
-# This script runs vulnerability scanners for CDN service and Container Images.
+# This script runs vulnerability scanners for Mock S3 service and container images.
 
 set -e
 
@@ -14,19 +14,19 @@ VENV_PATH="$PROJECT_ROOT/.venv"
 echo "=== Starting Supply Chain Security Scan ==="
 echo ""
 
-# 1. CDN Scanning (Python)
-echo "[1/2] Scanning CDN Dependencies (pip-audit)..."
+# 1. Python dependency scanning
+echo "[1/2] Scanning Mock S3 Dependencies (pip-audit)..."
 if [ -d "$VENV_PATH" ]; then
     source "$VENV_PATH/bin/activate"
     if command -v pip-audit &> /dev/null; then
-        pip-audit -r "$PROJECT_ROOT/requirements.txt" || echo "Vulnerabilities found in CDN!"
+        pip-audit -r "$PROJECT_ROOT/requirements.txt" || echo "Vulnerabilities found in Mock S3!"
     else
         echo "Error: pip-audit not found in venv. Run ./scripts/install-depends.sh first."
     fi
 else
     # Fallback to checking for global pip-audit if venv doesn't exist (useful for some environments)
     if command -v pip-audit &> /dev/null; then
-        pip-audit -r "$PROJECT_ROOT/requirements.txt" || echo "Vulnerabilities found in CDN!"
+        pip-audit -r "$PROJECT_ROOT/requirements.txt" || echo "Vulnerabilities found in Mock S3!"
     else
         echo "Error: Virtual environment not found at $VENV_PATH and pip-audit not found globally."
     fi
@@ -36,8 +36,8 @@ echo ""
 # 2. Container Scanning (Docker Scout)
 echo "[2/2] Scanning Docker Images (Docker Scout)..."
 if docker scout version &> /dev/null; then
-    echo "Scanning Mock CDN Image (Local)..."
-    docker scout cves local://plant-db-cdn-mock-cdn:latest --only-severity high,critical --exit-code || echo "High/Critical vulnerabilities found in Mock CDN Image!"
+    echo "Scanning Mock S3 Image (Local)..."
+    docker scout cves local://mock-s3:latest --only-severity high,critical --exit-code || echo "High/Critical vulnerabilities found in Mock S3 Image!"
 else
     echo "Docker Scout plugin not found."
     echo "To install, run: curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | sh"

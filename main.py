@@ -6,9 +6,8 @@ import aiofiles
 
 from aws_services.auth import verify_s3_v4_signature
 from aws_services.config import (
-    SRV_CDN_PORT,
-    S3_DEFAULT_CDN_BUCKET,
-    S3_ENFORCE_PLANT_HIERARCHY,
+    SRV_MOCK_S3_PORT,
+    S3_DEFAULT_PUBLIC_BUCKET,
     get_object_path,
 )
 from aws_services.s3_service import mock_s3_presigned_post_handler, S3AuthParams
@@ -29,7 +28,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-app = FastAPI(title="Mock AWS S3/CDN")
+app = FastAPI(title="Mock S3")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -62,37 +61,26 @@ def _file_response(bucket_name: str, key: str) -> FileResponse:
 @app.get("/cdn/{path:path}", responses={404: {"description": "File not found"}})
 async def get_cdn_file(path: str):
     """
-    Legacy CDN shortcut. Serves objects from the configured default CDN bucket.
+    Public-object shortcut. Serves objects from the configured default public bucket.
     """
-    return _file_response(S3_DEFAULT_CDN_BUCKET, path)
+    return _file_response(S3_DEFAULT_PUBLIC_BUCKET, path)
 
 
 @app.api_route("/health", methods=["GET", "OPTIONS"])
-async def cdn_health_check():
-    return Response(content='{"status": "cdn_reachable"}', media_type="application/json")
+async def health_check():
+    return Response(content='{"status": "mock_s3_reachable"}', media_type="application/json")
 
 
 @app.put("/{bucket_name}/{key:path}")
 async def s3_put_object(bucket_name: str, key: str, request: Request):
     """
-    Mock S3 PUT Object endpoint for Image Worker write-backs.
+    Mock S3 PUT Object endpoint for worker write-backs.
     Verifies SigV4 signature for authentication and owner consistency.
-    Optional legacy enforcement allows only 'company_X/plant_Y' hierarchical paths.
     """
     # 0. SigV4 Authentication Check
     if not await verify_s3_v4_signature(request):
         logger.error(f"[S3 Mock] PUT AccessDenied: Invalid SigV4 signature for {bucket_name}/{key}")
         return Response(content="SignatureDoesNotMatch (Invalid AWS Signature)", status_code=403)
-
-    if S3_ENFORCE_PLANT_HIERARCHY:
-        if not key.startswith("company_"):
-            logger.error(f"[S3 Mock] PUT AccessDenied: Key '{key}' violates company hierarchy policy.")
-            return Response(content="AccessDenied (Strict Company Hierarchy Required)", status_code=403)
-
-        parts = key.split("/")
-        if len(parts) < 3 or not parts[1].startswith("plant_"):
-            logger.error(f"[S3 Mock] PUT AccessDenied: Key '{key}' missing required plant_ folder.")
-            return Response(content="AccessDenied (Invalid Object Path Depth)", status_code=403)
 
     try:
         target_path = get_object_path(bucket_name, key)
@@ -139,5 +127,5 @@ async def s3_presigned_post(
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=SRV_CDN_PORT)
+    uvicorn.run(app, host="0.0.0.0", port=SRV_MOCK_S3_PORT)
 
